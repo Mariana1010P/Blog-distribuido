@@ -1,0 +1,39 @@
+version: '3'
+services:
+  post-service:
+    build: ./post-service
+    ports:
+      - "3001:3001"
+    networks:
+      - blognet
+
+  comment-service:
+    build: ./comment-service
+    ports:
+      - "3002:3002"
+    networks:
+      - blognet
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "8080:80"
+    networks:
+      - blognet
+
+  nginx:
+    image: nginx
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf
+      - ./nginx/certs:/etc/nginx/certs
+    ports:
+      - "443:443"
+    depends_on:
+      - post-service
+      - comment-service
+      - frontend
+    networks:
+      - blognet
+
+networks:
+  blognet:
