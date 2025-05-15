@@ -80,15 +80,56 @@
     <div id="posts"></div>
 
     <script>
+        let failureCount = 0;
+        const MAX_FAILURES = 3;
+        const COOLDOWN_TIME = 5000; // 5 segundos
+        let circuitOpen = false;
+
+        async function fetchWithRetry(url, options, retries = 3) {
+            if (circuitOpen) {
+                alert("⚠️ Servicio temporalmente no disponible. Reintenta en unos segundos.");
+                return;
+            }
+
+            for (let i = 0; i < retries; i++) {
+                try {
+                    const res = await fetch(url, options);
+                    if (!res.ok) throw new Error("Error en la respuesta del servidor");
+                    failureCount = 0; // reset al éxito
+                    return res;
+                } catch (err) {
+                    console.warn(`Reintento ${i + 1} fallido`, err);
+                    await new Promise(r => setTimeout(r, 1000));
+                }
+            }
+
+            failureCount++;
+            if (failureCount >= MAX_FAILURES) {
+                circuitOpen = true;
+                console.error("🔌 Circuito abierto: demasiados fallos");
+                setTimeout(() => {
+                    console.info("🟢 Circuito cerrado: reintentos habilitados");
+                    circuitOpen = false;
+                    failureCount = 0;
+                }, COOLDOWN_TIME);
+            }
+
+            throw new Error("Todos los intentos fallaron");
+        }
+
         async function loadPosts() {
-            const res = await fetch("/api/posts");
-            const posts = await res.json();
-            const container = document.getElementById("posts");
-            container.innerHTML = "";
-            for (let post of posts) {
-                const div = document.createElement("div");
-                div.innerHTML = `<h3>${post.title}</h3><p>${post.content}</p>`;
-                container.appendChild(div);
+            try {
+                const res = await fetch("/api/posts");
+                const posts = await res.json();
+                const container = document.getElementById("posts");
+                container.innerHTML = "";
+                for (let post of posts) {
+                    const div = document.createElement("div");
+                    div.innerHTML = `<h3>${post.title}</h3><p>${post.content}</p>`;
+                    container.appendChild(div);
+                }
+            } catch (err) {
+                console.error("Error cargando posts:", err.message);
             }
         }
 
@@ -96,16 +137,21 @@
             e.preventDefault();
             const title = document.getElementById("title").value;
             const content = document.getElementById("content").value;
-            await fetch("/api/posts", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ title, content })
-            });
-            document.getElementById("postForm").reset();
-            loadPosts();
+            try {
+                await fetchWithRetry("/api/posts", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ title, content })
+                });
+                document.getElementById("postForm").reset();
+                loadPosts();
+            } catch (err) {
+                alert("❌ No se pudo crear el post. Intenta nuevamente más tarde.");
+            }
         });
 
         loadPosts();
     </script>
+
 </body>
 </html>
